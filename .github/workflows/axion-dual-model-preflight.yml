@@ -1,0 +1,122 @@
+name: Note 5 Android 16 Dual-Model Preflight
+
+on:
+  push:
+    branches: [axion-16]
+    paths:
+      - ".github/workflows/axion-dual-model-preflight.yml"
+      - "manifests/noblelte-v1.0.xml"
+      - "device/samsung/**"
+      - "kernel/**"
+      - "scripts/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Sync Note 5 dependencies and validate model targets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out Note 5 port
+        uses: actions/checkout@v4
+        with:
+          ref: axion-16
+          persist-credentials: false
+
+      - name: Install repo tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y git-lfs python3
+          git lfs install
+          mkdir -p "$HOME/bin"
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o "$HOME/bin/repo"
+          chmod a+rx "$HOME/bin/repo"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Initialize the pinned LineageOS 23.2 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/lineage-source"
+          cd "$GITHUB_WORKSPACE/lineage-source"
+          repo init -u https://github.com/LineageOS/android.git -b lineage-23.2 --git-lfs
+          mkdir -p .repo/manifests
+          cp "$GITHUB_WORKSPACE/manifests/noblelte-v1.0.xml" .repo/manifests/
+          repo init -m noblelte-v1.0.xml
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse(".repo/manifests/noblelte-v1.0.xml").getroot()
+          projects = [
+              p.attrib.get("path", p.attrib["name"])
+              for p in root.findall("project")
+              if "noblelte" in p.attrib.get("groups", "").split(",")
+          ]
+          print(f"Found {len(projects)} Note 5 dependency projects in pinned manifest")
+          for path in projects:
+              print(path)
+          PY
+          repo sync -c --no-tags -j2 --groups=noblelte
+
+      - name: Stage device tree and kernel configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/lineage-source"
+          mkdir -p device/samsung
+          cp -a "$GITHUB_WORKSPACE/device/samsung/nobleltedv" device/samsung/
+          cp -a "$GITHUB_WORKSPACE/device/samsung/nobleltespr" device/samsung/
+          install -D "$GITHUB_WORKSPACE/kernel/exynos7420-nobleltespr_defconfig" \
+            kernel/samsung/universal7420/arch/arm64/configs/exynos7420-nobleltespr_defconfig
+          test -d device/samsung/noblelte
+          test -d device/samsung/universal7420-common
+          test -d kernel/samsung/universal7420
+          test -d vendor/samsung
+          echo "Pinned Note 5 common device, kernel and vendor dependencies are present."
+
+      - name: Validate N920I target and report N920C readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/lineage-source"
+          report="$GITHUB_STEP_SUMMARY"
+          echo "## Galaxy Note 5 model readiness" >> "$report"
+
+          n920i="device/samsung/nobleltedv/lineage_nobleltedv.mk"
+          if [[ -f "$n920i" ]] \
+             && grep -q '^PRODUCT_MODEL := SM-N920I$' "$n920i" \
+             && grep -q 'lineage_nobleltedv-bp4a-userdebug' device/samsung/nobleltedv/AndroidProducts.mk; then
+            echo "- **SM-N920I:** product definition found (lineage_nobleltedv)." >> "$report"
+          else
+            echo "- **SM-N920I:** product definition missing or inconsistent." >> "$report"
+            exit 1
+          fi
+
+          n920c_products=()
+          while IFS= read -r -d '' file; do
+            if grep -q '^PRODUCT_MODEL := SM-N920C$' "$file" \
+               && grep -q '^PRODUCT_DEVICE := noblelte$' "$file"; then
+              n920c_products+=("$file")
+            fi
+          done < <(find device/samsung -type f \( -name '*.mk' -o -name 'AndroidProducts.mk' \) -print0)
+
+          if (( ${#n920c_products[@]} > 0 )); then
+            echo "- **SM-N920C:** model-specific product definition found: ${n920c_products[*]}." >> "$report"
+          else
+            echo "- **SM-N920C:** **BLOCKED** — no separate N920C / noblelte product definition exists yet." >> "$report"
+            echo "" >> "$report"
+            echo "The N920I product has not been relabelled. N920C needs its own device/product configuration and modem/vendor compatibility review before it can be built or flashed." >> "$report"
+          fi
+
+      - name: Upload pinned manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: note5-pinned-manifest
+          path: lineage-source/.repo/manifests/noblelte-v1.0.xml
+          if-no-files-found: warn
+          retention-days: 7
