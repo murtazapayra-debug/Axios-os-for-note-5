@@ -97,10 +97,21 @@ jobs:
           grep -q '^PRODUCT_DEVICE := nobleltec$' "$n920c"
           grep -q 'lineage_nobleltec-bp4a-userdebug' device/samsung/nobleltec/AndroidProducts.mk
           grep -q 'include device/samsung/noblelte/BoardConfig.mk' device/samsung/nobleltec/BoardConfig.mk
+          grep -q 'device/samsung/nobleltedv/sepolicy/vendor' device/samsung/nobleltec/BoardConfig.mk
+          grep -q 'device/samsung/nobleltedv/sepolicy/private' device/samsung/nobleltec/BoardConfig.mk
+          grep -q 'device/samsung/nobleltec/modem/radio-manifest.xml' device/samsung/nobleltec/BoardConfig.mk
           test -f device/samsung/nobleltec/n920c-features.xml
-          echo "- **SM-N920C:** separate product target lineage_nobleltec found; it inherits the shared Exynos 7420 board and vendor configuration." >> "$report"
+          test -f device/samsung/nobleltec/modem/init.nobleltec-baseband.rc
+          test -f device/samsung/nobleltec/modem/init.nobleltec-ril.rc
+          test -f device/samsung/nobleltec/modem/radio-manifest.xml
+          grep -q '^    ro.vendor.multisim.simslotcount=1' "$n920c"
+          ! grep -q 'slot2' device/samsung/nobleltec/modem/radio-manifest.xml
+          ! grep -q 'ril-daemon1' device/samsung/nobleltec/modem/init.nobleltec-ril.rc
+          ! grep -q 'N920CXXS5CRH3' "$n920c"
+          echo "- **SM-N920C:** separate single-SIM product target, N920C-specific init files and slot-1-only radio manifest found." >> "$report"
+          echo "- **SELinux:** shared Note 5 vendor and private policy directories are included." >> "$report"
           echo "" >> "$report"
-          echo "**Important:** this is product-definition validation only. It does not prove the N920C lunch target compiles or that modem, SIM, calls, Wi-Fi, camera, and other hardware work. A full Android build and N920C device test are still required." >> "$report"
+          echo "**Important:** this is dependency-sync and static product-definition validation only. The manifest sync is intentionally limited to the Note 5 dependency group; it does not run `lunch`, compile Android, or prove modem, SIM, calls, Wi-Fi, camera, and other hardware. A full source checkout/build and physical N920C test are still required." >> "$report"
 
       - name: Upload pinned manifest
         if: always()
