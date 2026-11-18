@@ -88,7 +88,20 @@ jobs:
           echo "## Galaxy Note 5 model readiness" >> "$report"
 
           n920i="device/samsung/nobleltedv/lineage_nobleltedv.mk"
-          grep -q '^PRODUCT_MODEL := SM-N920I
+          grep -q '^PRODUCT_MODEL := SM-N920I$' "$n920i"
+          grep -q 'lineage_nobleltedv-bp4a-userdebug' device/samsung/nobleltedv/AndroidProducts.mk
+          echo "- **SM-N920I:** separate product target lineage_nobleltedv found." >> "$report"
+
+          n920c="device/samsung/nobleltec/lineage_nobleltec.mk"
+          grep -q '^PRODUCT_MODEL := SM-N920C$' "$n920c"
+          grep -q '^PRODUCT_DEVICE := nobleltec$' "$n920c"
+          grep -q 'lineage_nobleltec-bp4a-userdebug' device/samsung/nobleltec/AndroidProducts.mk
+          grep -q 'include device/samsung/noblelte/BoardConfig.mk' device/samsung/nobleltec/BoardConfig.mk
+          test -f device/samsung/nobleltec/n920c-features.xml
+          echo "- **SM-N920C:** separate product target lineage_nobleltec found; it inherits the shared Exynos 7420 board and vendor configuration." >> "$report"
+          echo "" >> "$report"
+          echo "**Important:** this is product-definition validation only. It does not prove the N920C lunch target compiles or that modem, SIM, calls, Wi-Fi, camera, and other hardware work. A full Android build and N920C device test are still required." >> "$report"
+
       - name: Upload pinned manifest
         if: always()
         uses: actions/upload-artifact@v4
