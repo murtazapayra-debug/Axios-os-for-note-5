@@ -59,16 +59,51 @@ jobs:
           cp "$GITHUB_WORKSPACE/manifests/noblelte-v1.0.xml" .repo/manifests/
           repo init -m noblelte-v1.0.xml
 
-      - name: Sync complete Android source
+      - name: Sync complete Android source with retries and diagnostics
         shell: bash
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/lineage-source"
-          echo "Disk space before full sync:"
-          df -h /
-          repo sync -c --no-tags --optimized-fetch --prune -j4
-          echo "Disk space after full sync:"
-          df -h /
+          sync_log="$GITHUB_WORKSPACE/lineage-sync.log"
+          : > "$sync_log"
+          echo "Disk and inode capacity before sync:" | tee -a "$sync_log"
+          df -h / "$GITHUB_WORKSPACE" | tee -a "$sync_log"
+          df -i / "$GITHUB_WORKSPACE" | tee -a "$sync_log"
+          echo "Starting full manifest sync with conservative concurrency (2 jobs)." | tee -a "$sync_log"
+
+          sync_rc=1
+          for attempt in 1 2 3; do
+            echo "===== repo sync attempt $attempt/3 at $(date -u +%FT%TZ) =====" | tee -a "$sync_log"
+            echo "Available disk before attempt:" | tee -a "$sync_log"
+            df -h / "$GITHUB_WORKSPACE" | tee -a "$sync_log"
+
+            set +e
+            repo sync -c --no-tags --optimized-fetch --prune -j2 2>&1 | tee -a "$sync_log"
+            sync_rc=${PIPESTATUS[0]}
+            set -e
+
+            echo "repo sync exit code: $sync_rc" | tee -a "$sync_log"
+            echo "Available disk after attempt:" | tee -a "$sync_log"
+            df -h / "$GITHUB_WORKSPACE" | tee -a "$sync_log"
+            df -i / "$GITHUB_WORKSPACE" | tee -a "$sync_log"
+
+            if [ "$sync_rc" -eq 0 ]; then
+              echo "Full source sync completed." | tee -a "$sync_log"
+              break
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              echo "Sync failed; waiting 30 seconds and retrying. repo sync will resume already-fetched projects." | tee -a "$sync_log"
+              sleep 30
+            fi
+          done
+
+          if [ "$sync_rc" -ne 0 ]; then
+            echo "Full source sync failed after 3 attempts. Review lineage-sync.log for project-specific errors, network failures, or disk exhaustion." | tee -a "$sync_log"
+            exit "$sync_rc"
+          fi
+          echo "Disk space after successful sync:" | tee -a "$sync_log"
+          df -h / "$GITHUB_WORKSPACE" | tee -a "$sync_log"
 
       - name: Apply pinned Note 5 patches and stage model targets
         shell: bash
