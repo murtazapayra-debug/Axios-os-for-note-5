@@ -139,3 +139,12 @@ jobs:
           echo "- **N920I lunch:** $i_name / $i_device / $i_model" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**Scope:** lunch/product configuration validation only. This job does not compile or produce a flashable ROM." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload source sync diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: note5-lineage-sync-diagnostics
+          path: lineage-sync.log
+          if-no-files-found: ignore
+          retention-days: 7
