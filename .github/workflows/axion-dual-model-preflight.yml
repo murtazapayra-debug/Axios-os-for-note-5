@@ -70,6 +70,7 @@ jobs:
           mkdir -p device/samsung
           cp -a "$GITHUB_WORKSPACE/device/samsung/nobleltedv" device/samsung/
           cp -a "$GITHUB_WORKSPACE/device/samsung/nobleltespr" device/samsung/
+          cp -a "$GITHUB_WORKSPACE/device/samsung/nobleltec" device/samsung/
           install -D "$GITHUB_WORKSPACE/kernel/exynos7420-nobleltespr_defconfig" \
             kernel/samsung/universal7420/arch/arm64/configs/exynos7420-nobleltespr_defconfig
           test -d device/samsung/noblelte
@@ -78,7 +79,7 @@ jobs:
           test -d vendor/samsung
           echo "Pinned Note 5 common device, kernel and vendor dependencies are present."
 
-      - name: Validate N920I target and report N920C readiness
+      - name: Validate separate N920I and N920C product targets
         shell: bash
         run: |
           set -euo pipefail
@@ -87,30 +88,46 @@ jobs:
           echo "## Galaxy Note 5 model readiness" >> "$report"
 
           n920i="device/samsung/nobleltedv/lineage_nobleltedv.mk"
-          if [[ -f "$n920i" ]] \
-             && grep -q '^PRODUCT_MODEL := SM-N920I$' "$n920i" \
-             && grep -q 'lineage_nobleltedv-bp4a-userdebug' device/samsung/nobleltedv/AndroidProducts.mk; then
-            echo "- **SM-N920I:** product definition found (lineage_nobleltedv)." >> "$report"
-          else
-            echo "- **SM-N920I:** product definition missing or inconsistent." >> "$report"
-            exit 1
-          fi
+          grep -q '^PRODUCT_MODEL := SM-N920I
+      - name: Upload pinned manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: note5-pinned-manifest
+          path: lineage-source/.repo/manifests/noblelte-v1.0.xml
+          if-no-files-found: warn
+          retention-days: 7
+ "$n920i"
+          grep -q 'lineage_nobleltedv-bp4a-userdebug' device/samsung/nobleltedv/AndroidProducts.mk
+          echo "- **SM-N920I:** separate product target lineage_nobleltedv found." >> "$report"
 
-          n920c_products=()
-          while IFS= read -r -d '' file; do
-            if grep -q '^PRODUCT_MODEL := SM-N920C$' "$file" \
-               && grep -q '^PRODUCT_DEVICE := noblelte$' "$file"; then
-              n920c_products+=("$file")
-            fi
-          done < <(find device/samsung -type f \( -name '*.mk' -o -name 'AndroidProducts.mk' \) -print0)
-
-          if (( ${#n920c_products[@]} > 0 )); then
-            echo "- **SM-N920C:** model-specific product definition found: ${n920c_products[*]}." >> "$report"
-          else
-            echo "- **SM-N920C:** **BLOCKED** — no separate N920C / noblelte product definition exists yet." >> "$report"
-            echo "" >> "$report"
-            echo "The N920I product has not been relabelled. N920C needs its own device/product configuration and modem/vendor compatibility review before it can be built or flashed." >> "$report"
-          fi
+          n920c="device/samsung/nobleltec/lineage_nobleltec.mk"
+          grep -q '^PRODUCT_MODEL := SM-N920C
+      - name: Upload pinned manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: note5-pinned-manifest
+          path: lineage-source/.repo/manifests/noblelte-v1.0.xml
+          if-no-files-found: warn
+          retention-days: 7
+ "$n920c"
+          grep -q '^PRODUCT_DEVICE := nobleltec
+      - name: Upload pinned manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: note5-pinned-manifest
+          path: lineage-source/.repo/manifests/noblelte-v1.0.xml
+          if-no-files-found: warn
+          retention-days: 7
+ "$n920c"
+          grep -q 'lineage_nobleltec-bp4a-userdebug' device/samsung/nobleltec/AndroidProducts.mk
+          grep -q 'include device/samsung/noblelte/BoardConfig.mk' device/samsung/nobleltec/BoardConfig.mk
+          test -f device/samsung/nobleltec/n920c-features.xml
+          echo "- **SM-N920C:** separate product target lineage_nobleltec found; it inherits the shared Exynos 7420 board and vendor configuration." >> "$report"
+          echo "" >> "$report"
+          echo "**Important:** this is product-definition validation only. It does not prove the N920C lunch target compiles or that modem, SIM, calls, Wi-Fi, camera, and other hardware work. A full Android build and N920C device test are still required." >> "$report"
 
       - name: Upload pinned manifest
         if: always()
