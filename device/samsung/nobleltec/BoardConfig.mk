@@ -11,8 +11,6 @@ KERNEL_CC := CC="$(KERNEL_CC_WRAPPER) clang"
 $(call soong_config_set,samsungVars,target_specific_header_path,device/samsung/universal7420-common/include)
 
 BOARD_VENDOR_SEPOLICY_DIRS += device/samsung/nobleltespr/sepolicy/vendor
-BOARD_VENDOR_SEPOLICY_DIRS += device/samsung/nobleltec/sepolicy/vendor
-SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS += device/samsung/nobleltec/sepolicy/private
 PRODUCT_SOONG_NAMESPACES += device/samsung/nobleltespr
 PRODUCT_SOONG_NAMESPACES += hardware/broadcom/libbt
 $(call soong_config_set,brcm_libbt,custom_bt_config,//device/samsung/nobleltespr:note5_bluetooth_vendor_config)
