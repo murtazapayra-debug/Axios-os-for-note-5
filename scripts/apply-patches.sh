@@ -100,7 +100,7 @@ if [[ -e "$config_target" ]] && ! cmp -s "$repo_dir/kernel/exynos7420-nobleltesp
   echo 'Existing kernel config differs; review before replacement.' >&2; exit 1
 fi
 cp -- "$repo_dir/kernel/exynos7420-nobleltespr_defconfig" "$config_target"
-for product in nobleltespr nobleltedv; do
+for product in nobleltespr nobleltedv nobleltec; do
   mkdir -p -- "device/samsung/$product"
   cp -a -- "$repo_dir/device/samsung/$product/." "device/samsung/$product/"
 done
