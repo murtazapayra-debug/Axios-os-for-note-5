@@ -1,0 +1,106 @@
+name: Note 5 Android 16 Full Source Lunch Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [axion-16]
+    paths:
+      - ".github/workflows/note5-full-lunch.yml"
+      - "manifests/noblelte-v1.0.xml"
+      - "device/samsung/**"
+      - "kernel/**"
+      - "patches/**"
+      - "scripts/apply-patches.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  lunch-validation:
+    name: Full source sync, patch and lunch validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Check out Note 5 port
+        uses: actions/checkout@v4
+        with:
+          ref: axion-16
+          persist-credentials: false
+
+      - name: Free runner storage and inspect capacity
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/powershell /usr/local/lib/android/sdk
+          sudo docker system prune -af || true
+          df -h /
+          echo "Available disk space: $(df -BG / | awk 'NR==2 {print $4}')"
+
+      - name: Install repo and required host packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y git git-lfs python3 curl bc bison build-essential ccache flex g++-multilib gcc-multilib             lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses-dev libsdl1.2-dev             libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools             xsltproc zip zlib1g-dev
+          git lfs install
+          mkdir -p "$HOME/bin"
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo -o "$HOME/bin/repo"
+          chmod a+rx "$HOME/bin/repo"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Initialize pinned LineageOS 23.2 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/lineage-source"
+          cd "$GITHUB_WORKSPACE/lineage-source"
+          repo init -u https://github.com/LineageOS/android.git -b lineage-23.2 --git-lfs
+          mkdir -p .repo/manifests
+          cp "$GITHUB_WORKSPACE/manifests/noblelte-v1.0.xml" .repo/manifests/
+          repo init -m noblelte-v1.0.xml
+
+      - name: Sync complete Android source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/lineage-source"
+          echo "Disk space before full sync:"
+          df -h /
+          repo sync -c --no-tags --optimized-fetch --prune -j4
+          echo "Disk space after full sync:"
+          df -h /
+
+      - name: Apply pinned Note 5 patches and stage model targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/lineage-source"
+          bash "$GITHUB_WORKSPACE/scripts/apply-patches.sh" "$PWD"
+          test -f device/samsung/nobleltec/lineage_nobleltec.mk
+          test -f device/samsung/nobleltedv/lineage_nobleltedv.mk
+
+      - name: Validate N920C and N920I lunch targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/lineage-source"
+          source build/envsetup.sh
+          lunch lineage_nobleltec-bp4a-userdebug
+          c_device="$(get_build_var PRODUCT_DEVICE)"
+          c_name="$(get_build_var PRODUCT_NAME)"
+          c_model="$(get_build_var PRODUCT_MODEL)"
+          test "$c_device" = "nobleltec"
+          test "$c_name" = "lineage_nobleltec"
+          test "$c_model" = "SM-N920C"
+          echo "- **N920C lunch:** $c_name / $c_device / $c_model" >> "$GITHUB_STEP_SUMMARY"
+
+          lunch lineage_nobleltedv-bp4a-userdebug
+          i_device="$(get_build_var PRODUCT_DEVICE)"
+          i_name="$(get_build_var PRODUCT_NAME)"
+          i_model="$(get_build_var PRODUCT_MODEL)"
+          test "$i_device" = "nobleltedv"
+          test "$i_name" = "lineage_nobleltedv"
+          test "$i_model" = "SM-N920I"
+          echo "- **N920I lunch:** $i_name / $i_device / $i_model" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Scope:** lunch/product configuration validation only. This job does not compile or produce a flashable ROM." >> "$GITHUB_STEP_SUMMARY"
